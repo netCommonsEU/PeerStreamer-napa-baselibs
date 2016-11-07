@@ -18,7 +18,7 @@ proper developing tools installed).
 Developments versions of the following libraries are needed:
  - libevent2 (http://monkey.org/~provos/libevent/ - note that we
    use version 2.0, generally referred to as libevent2)
- - libconfuse (http://www.nongnu.org/confuse/)
+ - libconfuse (https://github.com/martinh/libconfuse)
 
 These libraries are authomatically downloaded by the build script (build_all.sh).
 
@@ -26,6 +26,6 @@ These libraries are authomatically downloaded by the build script (build_all.sh)
 
 Execute:
 
-`build_all.sh -q`
+`./build_all.sh -q`
 
 
