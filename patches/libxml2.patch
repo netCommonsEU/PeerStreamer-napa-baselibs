@@ -1,0 +1,13 @@
+--- threads.c	2009-10-02 17:28:18.000000000 +0200
++++ threadsnew.c	2016-12-14 18:43:06.916887298 +0100
+@@ -77,8 +77,10 @@
+ 	   __attribute((weak));
+ extern int pthread_cond_wait ()
+ 	   __attribute((weak));
++#ifndef pthread_equal
+ extern int pthread_equal ()
+ 	   __attribute((weak));
++#endif
+ extern pthread_t pthread_self ()
+ 	   __attribute((weak));
+ extern int pthread_key_create ()

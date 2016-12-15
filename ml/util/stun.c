@@ -657,9 +657,13 @@ stunRand()
 
 #if defined(__GNUC__) && ( defined(__i686__) || defined(__i386__) || defined(__amd64__) )
       asm("rdtsc" : "=A" (tick));
+#elif defined(__GNUC__)
+      int fd=open("/dev/random",O_RDONLY);
+      read(fd,&tick,sizeof(tick));
+      close(fd);
 #elif defined (__SUNPRO_CC) || defined( __sparc__ )	
       tick = gethrtime();
-#elif defined(__MACH__) 
+#elif defined(__MACH__)
       int fd=open("/dev/random",O_RDONLY);
       read(fd,&tick,sizeof(tick));
       closesocket(fd);

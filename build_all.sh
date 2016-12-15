@@ -2,6 +2,19 @@
 BUILD_ROOT_DIR=`dirname $0`
 cd "$BUILD_ROOT_DIR"
 BUILD_ROOT_DIR=`pwd`
+CONFIG_GUESS=/usr/share/misc/config.guess
+if [ -z "$HOSTARCH" ]
+then
+	CC=gcc
+else
+	CC=${HOSTARCH}-gcc
+	LD=${HOSTARCH}-ld
+	HOSTBUILD=`${CONFIG_GUESS}`
+fi
+
+echo "HOSTARCH: $HOSTARCH"
+echo "CC: $CC"
+echo "HOSTBUILD: $HOSTBUILD"
 
 #check the architecture
 UNAME=`uname`
@@ -149,7 +162,7 @@ get_system_includes() {
 
 
 get_system_libs() {
-   GCC_LIBPATH=`gcc -print-search-dirs  | grep "^libraries:" | sed -e 's/^libraries.*=//'`
+   GCC_LIBPATH=`$CC -print-search-dirs  | grep "^libraries:" | sed -e 's/^libraries.*=//'`
    GCC_LIBPATH="$GCC_LIBPATH:/usr/local/lib"    
    echo "Your system libdirs are: $GCC_LIBPATH"
 }
@@ -193,7 +206,8 @@ prepare_lib() {
 #echo $LIB_DIR_VARNAME is $LIB_DIR 
     TEST_FILES="$3"
     DOWNLOAD_CMD="$4"
-    BUILD_CMD="$5"
+    PATCH_CMD="$5"
+    BUILD_CMD="$6"
     
     LIB_HOME="${THIRDPARTY_DIR}/${LIB_NAME}"
     if [ "$LIB_DIR" == '<rebuild_local>' ] ; then INSTALL_COMPONENT=true
@@ -251,6 +265,13 @@ prepare_lib() {
 
        echo "Building $LIB_NAME"  
        cd _src/*/.
+
+       if [ -n  "${PATCH_CMD}" ]
+       then
+         echo "Patching $LIB_NAME"
+         eval "$PATCH_CMD" || { echo "ERROR Patching $LIB_NAME" ; exit 1; }
+       fi
+
        eval "$BUILD_CMD" || { echo "ERROR BUilding $LIB_NAME" ; exit 1; }
        popd
     fi      
@@ -276,13 +297,15 @@ get_system_libs
 prepare_lib libevent LIBEVENT_DIR "event2/event.h libevent.a" \
         "cache_or_wget http://www.monkey.org/~provos/libevent-2.0.3-alpha.tar.gz; \
                   tar xvzf libevent-2.0.3-alpha.tar.gz" \
-			 "./configure --prefix=\$LIB_HOME --libdir=\$LIB_HOME/lib ${HOSTARCH:+--host=$HOSTARCH};\
+	""\
+			 "./configure --prefix=\$LIB_HOME --libdir=\$LIB_HOME/lib ${HOSTARCH:+--build=$HOSTBUILD --host=$HOSTARCH};\
         $MAKE; make install" 
 
 prepare_lib libconfuse LIBCONFUSE_DIR "confuse.h libconfuse.a" \
 	"cache_or_wget http://savannah.nongnu.org/download/confuse/confuse-2.7.tar.gz;\
 	tar xvzf confuse-2.7.tar.gz" \
-			 "./configure --disable-examples --prefix=\$LIB_HOME --libdir=\$LIB_HOME/lib ${HOSTARCH:+--host=$HOSTARCH --build=x86_64-unknown-linux-gnu};\
+	""\
+			 "./configure --disable-examples --prefix=\$LIB_HOME --libdir=\$LIB_HOME/lib ${HOSTARCH:+--host=$HOSTARCH --build=$HOSTBUILD};\
 			 $MAKE; make install" 
 [ `uname -m` = x86_64 ] && LIBEXPAT_HACK='--with-expat=builtin'
 
@@ -290,7 +313,8 @@ if [ -n "$ALTO" ] ; then
 prepare_lib libxml2 LIBXML2_DIR "libxml2/libxml/xmlversion.h libxml2/libxml/xmlIO.h libxml2/libxml/parser.h libxml2/libxml/tree.h libxml2.a" \
         "cache_or_wget http://xmlsoft.org/sources/libxml2-2.7.6.tar.gz; \
               tar xvzf libxml2-2.7.6.tar.gz" \
-        "./configure --with-python=no --with-threads --prefix=\$LIB_HOME --libdir=\$LIB_HOME/lib ${HOSTARCH:+--host=$HOSTARCH};\
+	"patch -p 0 < ${BUILD_ROOT_DIR}/patches/libxml2.patch" \
+        "./configure --with-python=no --with-threads --prefix=\$LIB_HOME --libdir=\$LIB_HOME/lib ${HOSTARCH:+--host=$HOSTARCH --build=$HOSTBUILD};\
 		    $MAKE; make install" 
 fi
 }
@@ -321,22 +345,27 @@ export LIBEVENT_DIR LIBCONFUSE_DIR LIBXML2_DIR
      [ -e Makefile ] && $MAKE distclean
    mkdir -p m4 config
      autoreconf --force -I config -I m4 --install
-     echo "./configure $EVOPT $CONFOPT $CONF_CPPFLAGS ${HOSTARCH:+--host=$HOSTARCH}"
-     echo "./configure $EVOPT $CONFOPT $CONF_CPPFLAGS ${HOSTARCH:+--host=$HOSTARCH}" > conf.sh
+     echo "./configure $EVOPT $CONFOPT $CONF_CPPFLAGS ${HOSTARCH:+--host=$HOSTARCH --build=$BUILDARCH}"
+     echo "./configure $EVOPT $CONFOPT $CONF_CPPFLAGS ${HOSTARCH:+--host=$HOSTARCH --build=$BUILDARCH}" > conf.sh
      sh conf.sh
      echo "//blah" > common/chunk.c
    fi
    ALTO_NEEDED=`grep 1 <<<"$ALTO"`
    for SUBDIR in dclog common monl rep ${ALTO_NEEDED:+ALTOclient} ; do
        echo "Making `pwd`/$SUBDIR"
-       $MAKE -C $SUBDIR || { echo "ERROR Building $SUBDIR"; exit 1; }
+       if [ "${SUBDIR}" == "ALTOclient" ]
+       then
+         $MAKE -C $SUBDIR ${HOSTARCH:+CC=$CC LD=$LD} || { echo "ERROR Building $SUBDIR"; exit 1; }
+       else
+         $MAKE -C $SUBDIR || { echo "ERROR Building $SUBDIR"; exit 1; }
+       fi
    done
    cd ml
       if [ ! -e Makefile -o -n "$REBUILD_BASELIBS" ] ; then
         mkdir -p m4 config
         autoreconf --force -I config -I m4 --install
-     echo "./configure $EVOPT $CONFOPT $CONF_CPPFLAGS ${HOSTARCH:+--host=$HOSTARCH}"
-     echo "./configure $EVOPT $CONFOPT $CONF_CPPFLAGS ${HOSTARCH:+--host=$HOSTARCH}" > conf.sh
+     echo "./configure $EVOPT $CONFOPT $CONF_CPPFLAGS ${HOSTARCH:+--host=$HOSTARCH --build=$BUILDARCH}}"
+     echo "./configure $EVOPT $CONFOPT $CONF_CPPFLAGS ${HOSTARCH:+--host=$HOSTARCH --build=$BUILDARCH}}" > conf.sh
      sh conf.sh
 	$MAKE clean
       fi
