@@ -652,8 +652,8 @@ void send_conn_msg(int con_id, int buf_size, int command_type)
 
 	struct conn_msg *msg_header = (struct conn_msg*) connectbuf[con_id]->ctrl_msg_buf;
 
-	msg_header->comand_type = command_type;
-	msg_header->pmtu_size = connectbuf[con_id]->pmtusize;
+	msg_header->comand_type = htonl(command_type);
+	msg_header->pmtu_size = htonl(connectbuf[con_id]->pmtusize);
 
 	memcpy(&(msg_header->sock_id), loc_socketID, sizeof(socket_ID));
   {
@@ -661,6 +661,13 @@ void send_conn_msg(int con_id, int buf_size, int command_type)
                         mlSocketIDToString(&((struct conn_msg*)connectbuf[con_id]->ctrl_msg_buf)->sock_id,buf,sizeof(buf));
                         debug("Local socket_address sent in INVITE: %s, sizeof msg %ld\n", buf, sizeof(struct conn_msg));
    }
+
+	// Convert ss_fanilies in sock_id to network byte order
+	msg_header->sock_id.internal_addr.ss_family =
+		htons(msg_header->sock_id.internal_addr.ss_family);
+	msg_header->sock_id.external_addr.ss_family =
+		htons(msg_header->sock_id.internal_addr.ss_family);
+
 	send_msg(con_id, ML_CON_MSG, connectbuf[con_id]->ctrl_msg_buf, buf_size, true, &(connectbuf[con_id]->defaultSendParams));
 }
 
@@ -693,6 +700,14 @@ void recv_conn_msg(struct msg_header *msg_h, char *msgbuf, int msg_size, struct 
 	msgbuf += msg_h->len_mon_data_hdr;
 	msg_size -= msg_h->len_mon_data_hdr;
 	con_msg = (struct conn_msg *)msgbuf;
+
+	con_msg->pmtu_size = ntohl(con_msg->pmtu_size);
+
+	// Convert ss_fanilies in sock_id to network byte order
+	con_msg->sock_id.internal_addr.ss_family =
+		ntohs(con_msg->sock_id.internal_addr.ss_family);
+	con_msg->sock_id.external_addr.ss_family =
+		ntohs(con_msg->sock_id.internal_addr.ss_family);
 	
 	//verify message validity
 	if (msg_size < sizeof(struct conn_msg)) {
@@ -739,7 +754,7 @@ void recv_conn_msg(struct msg_header *msg_h, char *msgbuf, int msg_size, struct 
 	}
 
 	// check the connection command type
-	switch (con_msg->comand_type) {
+	switch (ntohl(con_msg->comand_type)) {
 		/*
 		* if INVITE: enter a new socket make new entry in connect array
 		* send an ok
@@ -1600,6 +1615,7 @@ void recv_pkg(int fd, short event, void *arg)
 		msginfNow.monitoringHeaderLen = msg_h->len_mon_packet_hdr;
 		msginfNow.monitoringHeader = msg_h->len_mon_packet_hdr ? &msgbuf[0] + MSG_HEADER_SIZE : NULL;
 		//TODO rethink this ...
+		//TODO: fix endianess in ss_families of sock_id
 		if(msg_h->msg_type == ML_CON_MSG) {
 			struct conn_msg *c_msg = (struct conn_msg *) bufptr;
 			msginfNow.remote_socketID = &(c_msg->sock_id);

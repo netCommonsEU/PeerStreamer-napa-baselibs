@@ -203,7 +203,7 @@ typedef struct {
 #pragma pack(1)     /* set alignment to 1 byte boundary */
 struct conn_msg {
 	uint32_t comand_type; ///< see con_msg_types
-	int32_t pmtu_size;	/// the pmtu size 
+	uint32_t pmtu_size;	/// the pmtu size 
 	socket_ID sock_id;	/// the socketId of the sender
 } __attribute__((packed));
 
